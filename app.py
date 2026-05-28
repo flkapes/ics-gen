@@ -26,10 +26,19 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 class Event:
     name: str
     date: str
+    operation: str = "create"
+    uid: str | None = None
     start_time: str | None = None
     end_time: str | None = None
     location: str | None = None
     description: str | None = None
+    url: str | None = None
+    attachments: list[str] | None = None
+    recurrence_rule: str | None = None
+    recurrence_id: str | None = None
+    exdates: list[str] | None = None
+    timezone: str | None = None
+    geo: str | None = None
     alerts: list[int] | None = None
 
 
@@ -45,10 +54,29 @@ def init_db() -> None:
                 end_time TEXT,
                 location TEXT,
                 description TEXT,
+                url TEXT,
+                attachments TEXT,
+                recurrence_rule TEXT,
+                recurrence_id TEXT,
+                exdates TEXT,
+                timezone TEXT,
+                geo TEXT,
                 alerts TEXT
             )
             """
         )
+        existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(events)").fetchall()}
+        for column, column_type in [
+            ("url", "TEXT"),
+            ("attachments", "TEXT"),
+            ("recurrence_rule", "TEXT"),
+            ("recurrence_id", "TEXT"),
+            ("exdates", "TEXT"),
+            ("timezone", "TEXT"),
+            ("geo", "TEXT"),
+        ]:
+            if column not in existing_columns:
+                conn.execute(f"ALTER TABLE events ADD COLUMN {column} {column_type}")
         conn.commit()
 
 
@@ -60,13 +88,24 @@ def normalize_event(raw: dict[str, Any]) -> Event:
     elif isinstance(alerts_raw, str):
         alerts = [int(v.strip()) for v in alerts_raw.split(",") if v.strip()]
 
+    attachments_raw = raw.get("attachments")
+    exdates_raw = raw.get("exdates")
     return Event(
+        operation=str(raw.get("operation", "create")).strip().lower() or "create",
+        uid=str(raw.get("uid", "")).strip() or None,
         name=str(raw.get("name", "")).strip(),
         date=str(raw.get("date", "")).strip(),
         start_time=str(raw.get("start_time", "")).strip() or None,
         end_time=str(raw.get("end_time", "")).strip() or None,
         location=str(raw.get("location", "")).strip() or None,
         description=str(raw.get("description", "")).strip() or None,
+        timezone=str(raw.get("timezone", "")).strip() or None,
+        url=str(raw.get("url", "")).strip() or None,
+        geo=str(raw.get("geo", "")).strip() or None,
+        attachments=[str(v).strip() for v in attachments_raw if str(v).strip()] if isinstance(attachments_raw, list) else None,
+        recurrence_rule=str(raw.get("recurrence_rule", "")).strip() or None,
+        recurrence_id=str(raw.get("recurrence_id", "")).strip() or None,
+        exdates=[str(v).strip() for v in exdates_raw if str(v).strip()] if isinstance(exdates_raw, list) else None,
         alerts=alerts or None,
     )
 
@@ -84,7 +123,7 @@ def build_prompt(user_text: str) -> str:
         "You are an event extraction engine.\n"
         f"Today's date is {today}.\n"
         "Convert the user text into JSON with this exact schema:\n"
-        '{"events":[{"name":"...","date":"YYYY-MM-DD","start_time":"HH:MM or null","end_time":"HH:MM or null","location":"... or null","description":"... or null","alerts":[minutes_before,...]}]}\n'
+        '{"events":[{"operation":"create|override|cancel_instance","uid":"existing-id-or-null","name":"...","date":"YYYY-MM-DD","start_time":"HH:MM or null","end_time":"HH:MM or null","timezone":"IANA timezone or null","location":"... or null","description":"... or null","url":"https://... or null","geo":"lat;lon or null","attachments":["https://..."],"recurrence_rule":"RRULE:FREQ=WEEKLY;... or null","recurrence_id":"YYYY-MM-DDTHH:MM:SS or null","exdates":["YYYY-MM-DD",...],"alerts":[minutes_before,...]}]}\n'
         "Rules: Return ONLY JSON. Use 24-hour time. If no time, set start_time/end_time to null.\n"
         "If multiple events are present, return multiple items in events.\n"
         f"User text:\n{user_text}"
@@ -150,9 +189,33 @@ def parse_with_provider(provider: str, text: str) -> list[Event]:
 def write_events(events: Iterable[Event]) -> None:
     with sqlite3.connect(DB_PATH) as conn:
         for event in events:
+            event_id = event.uid or str(uuid.uuid4())
+            if event.operation == "cancel_instance" and event.uid:
+                existing = conn.execute("SELECT exdates FROM events WHERE id = ?", (event.uid,)).fetchone()
+                if existing:
+                    existing_exdates = {v.strip() for v in (existing[0] or "").split(",") if v.strip()}
+                    existing_exdates.add(event.date)
+                    conn.execute("UPDATE events SET exdates = ? WHERE id = ?", (",".join(sorted(existing_exdates)), event.uid))
+                continue
             conn.execute(
-                "INSERT INTO events (id, name, date, start_time, end_time, location, description, alerts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (str(uuid.uuid4()), event.name, event.date, event.start_time, event.end_time, event.location, event.description, ",".join(str(a) for a in event.alerts) if event.alerts else None),
+                "INSERT OR REPLACE INTO events (id, name, date, start_time, end_time, location, description, url, attachments, recurrence_rule, recurrence_id, exdates, timezone, geo, alerts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    event_id,
+                    event.name,
+                    event.date,
+                    event.start_time,
+                    event.end_time,
+                    event.location,
+                    event.description,
+                    event.url,
+                    ",".join(event.attachments) if event.attachments else None,
+                    event.recurrence_rule,
+                    event.recurrence_id,
+                    ",".join(event.exdates) if event.exdates else None,
+                    event.timezone,
+                    event.geo,
+                    ",".join(str(a) for a in event.alerts) if event.alerts else None,
+                ),
             )
         conn.commit()
 
@@ -173,12 +236,34 @@ def event_to_ics(event_row: sqlite3.Row) -> str:
         start_dt = dt.datetime.fromisoformat(f"{event_row['date']}T{event_row['start_time']}")
         dtend = (start_dt + dt.timedelta(hours=1)).strftime("%Y%m%dT%H%M%S")
 
-    lines = ["BEGIN:VEVENT", f"UID:{event_row['id']}@ics-gen", f"DTSTAMP:{dt.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}", f"SUMMARY:{event_row['name']}"]
-    lines.extend([f"DTSTART;VALUE=DATE:{dtstart}", f"DTEND;VALUE=DATE:{dtend}"] if all_day else [f"DTSTART:{dtstart}", f"DTEND:{dtend}"])
+    lines = ["BEGIN:VEVENT", f"UID:{event_row['id']}", f"DTSTAMP:{dt.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}", f"SUMMARY:{event_row['name']}"]
+    if all_day:
+        lines.extend([f"DTSTART;VALUE=DATE:{dtstart}", f"DTEND;VALUE=DATE:{dtend}"])
+    elif event_row["timezone"]:
+        lines.extend([f"DTSTART;TZID={event_row['timezone']}:{dtstart}", f"DTEND;TZID={event_row['timezone']}:{dtend}"])
+    else:
+        lines.extend([f"DTSTART:{dtstart}", f"DTEND:{dtend}"])
     if event_row["location"]:
         lines.append(f"LOCATION:{event_row['location']}")
     if event_row["description"]:
-        lines.append(f"DESCRIPTION:{event_row['description']}")
+        lines.append(f"DESCRIPTION:{event_row['description'].replace(chr(10), '\\n')}")
+    if event_row["url"]:
+        lines.append(f"URL:{event_row['url']}")
+    if event_row["geo"]:
+        lines.append(f"GEO:{event_row['geo']}")
+    if event_row["attachments"]:
+        for attachment in event_row["attachments"].split(","):
+            if attachment.strip():
+                lines.append(f"ATTACH:{attachment.strip()}")
+    if event_row["recurrence_rule"]:
+        rule = event_row["recurrence_rule"].strip()
+        lines.append(rule if rule.startswith("RRULE:") else f"RRULE:{rule}")
+    if event_row["recurrence_id"]:
+        lines.append(f"RECURRENCE-ID:{event_row['recurrence_id'].replace('-', '').replace(':', '')}")
+    if event_row["exdates"]:
+        exdate_values = [v.strip().replace("-", "") for v in event_row["exdates"].split(",") if v.strip()]
+        if exdate_values:
+            lines.append(f"EXDATE;VALUE=DATE:{','.join(exdate_values)}")
     if event_row["alerts"]:
         for minutes in event_row["alerts"].split(","):
             lines.extend(["BEGIN:VALARM", f"TRIGGER:-PT{minutes}M", "ACTION:DISPLAY", f"DESCRIPTION:Reminder: {event_row['name']}", "END:VALARM"])
@@ -188,6 +273,8 @@ def event_to_ics(event_row: sqlite3.Row) -> str:
 
 def build_calendar(events: list[sqlite3.Row]) -> str:
     out = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//ics-gen//Event Scheduler//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"]
+    for tzid in sorted({e["timezone"] for e in events if e["timezone"]}):
+        out.extend(["BEGIN:VTIMEZONE", f"TZID:{tzid}", "END:VTIMEZONE"])
     out.extend(event_to_ics(e) for e in events)
     out.append("END:VCALENDAR")
     return "\r\n".join(out) + "\r\n"
@@ -231,3 +318,12 @@ def save(event_text: str = Form(...)) -> RedirectResponse:
 @app.get("/calendar.ics")
 def calendar_feed() -> Response:
     return Response(content=build_calendar(fetch_rows()), media_type="text/calendar")
+
+
+@app.get("/shortcuts/add")
+def shortcuts_add(text: str) -> RedirectResponse:
+    provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+    events = parse_with_provider(provider, text.strip()) if text.strip() else []
+    if events:
+        write_events(events)
+    return RedirectResponse(url="/", status_code=303)
