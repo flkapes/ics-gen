@@ -22,6 +22,23 @@ app = FastAPI(title="Family Calendar Capture")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
+def load_dotenv_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+load_dotenv_file(BASE_DIR / ".env")
+
+
 @dataclass
 class Event:
     name: str
@@ -126,6 +143,10 @@ def build_prompt(user_text: str) -> str:
         '{"events":[{"operation":"create|override|cancel_instance","uid":"existing-id-or-null","name":"...","date":"YYYY-MM-DD","start_time":"HH:MM or null","end_time":"HH:MM or null","timezone":"IANA timezone or null","location":"... or null","description":"... or null","url":"https://... or null","geo":"lat;lon or null","attachments":["https://..."],"recurrence_rule":"RRULE:FREQ=WEEKLY;... or null","recurrence_id":"YYYY-MM-DDTHH:MM:SS or null","exdates":["YYYY-MM-DD",...],"alerts":[minutes_before,...]}]}\n'
         "Rules: Return ONLY JSON. Use 24-hour time. If no time, set start_time/end_time to null.\n"
         "If multiple events are present, return multiple items in events.\n"
+        "Alerts policy: unless user explicitly asks for no reminders, include 2-3 sensible alerts per event.\n"
+        "Prefer 1 week, 1 day, and 1 hour before when timeline allows.\n"
+        "If event is too soon, replace missed windows with multiple shorter reminders (for example 12h, 3h, 1h, or 30m).\n"
+        "Always return alert offsets in minutes in the alerts array.\n"
         f"User text:\n{user_text}"
     )
 
