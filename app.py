@@ -22,6 +22,28 @@ app = FastAPI(title="Family Calendar Capture")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
+def humanize_alerts(alerts: list[int] | None) -> str | None:
+    if not alerts:
+        return None
+    units: list[str] = []
+    for minutes in sorted({int(v) for v in alerts}, reverse=True):
+        if minutes % 10080 == 0:
+            value = minutes // 10080
+            units.append(f"{value} week{'s' if value != 1 else ''}")
+        elif minutes % 1440 == 0:
+            value = minutes // 1440
+            units.append(f"{value} day{'s' if value != 1 else ''}")
+        elif minutes % 60 == 0:
+            value = minutes // 60
+            units.append(f"{value} hour{'s' if value != 1 else ''}")
+        else:
+            units.append(f"{minutes} minutes")
+    return ", ".join(units) + " before"
+
+
+templates.env.globals["humanize_alerts"] = humanize_alerts
+
+
 def load_dotenv_file(path: Path) -> None:
     if not path.exists():
         return
@@ -98,6 +120,12 @@ def init_db() -> None:
 
 
 def normalize_event(raw: dict[str, Any]) -> Event:
+    def clean_optional(value: Any) -> str | None:
+        text = str(value or "").strip()
+        if not text or text.lower() in {"none", "null", "n/a", "na"}:
+            return None
+        return text
+
     alerts_raw = raw.get("alerts")
     alerts: list[int] = []
     if isinstance(alerts_raw, list):
@@ -109,22 +137,39 @@ def normalize_event(raw: dict[str, Any]) -> Event:
     exdates_raw = raw.get("exdates")
     return Event(
         operation=str(raw.get("operation", "create")).strip().lower() or "create",
-        uid=str(raw.get("uid", "")).strip() or None,
-        name=str(raw.get("name", "")).strip(),
+        uid=clean_optional(raw.get("uid")),
+        name=normalize_title(str(raw.get("name", "")).strip()),
         date=str(raw.get("date", "")).strip(),
-        start_time=str(raw.get("start_time", "")).strip() or None,
-        end_time=str(raw.get("end_time", "")).strip() or None,
-        location=str(raw.get("location", "")).strip() or None,
-        description=str(raw.get("description", "")).strip() or None,
-        timezone=str(raw.get("timezone", "")).strip() or None,
-        url=str(raw.get("url", "")).strip() or None,
-        geo=str(raw.get("geo", "")).strip() or None,
+        start_time=clean_optional(raw.get("start_time")),
+        end_time=clean_optional(raw.get("end_time")),
+        location=clean_optional(raw.get("location")),
+        description=normalize_description(clean_optional(raw.get("description")), normalize_title(str(raw.get("name", "")).strip())),
+        timezone=clean_optional(raw.get("timezone")),
+        url=clean_optional(raw.get("url")),
+        geo=clean_optional(raw.get("geo")),
         attachments=[str(v).strip() for v in attachments_raw if str(v).strip()] if isinstance(attachments_raw, list) else None,
         recurrence_rule=str(raw.get("recurrence_rule", "")).strip() or None,
         recurrence_id=str(raw.get("recurrence_id", "")).strip() or None,
         exdates=[str(v).strip() for v in exdates_raw if str(v).strip()] if isinstance(exdates_raw, list) else None,
         alerts=alerts or None,
     )
+
+
+def normalize_title(name: str) -> str:
+    cleaned = " ".join(name.split()).strip()
+    if not cleaned:
+        return "Scheduled Event"
+    titled = cleaned if cleaned.isupper() else cleaned.title()
+    if len(titled.split()) == 1:
+        return f"{titled} Appointment"
+    return titled
+
+
+def normalize_description(description: str | None, title: str) -> str | None:
+    if description and description.strip():
+        desc = " ".join(description.split()).strip()
+        return desc[0].upper() + desc[1:] if len(desc) > 1 else desc.upper()
+    return f"Auto-created calendar entry for {title}."
 
 
 def extract_json(text: str) -> dict[str, Any]:
@@ -143,9 +188,13 @@ def build_prompt(user_text: str) -> str:
         '{"events":[{"operation":"create|override|cancel_instance","uid":"existing-id-or-null","name":"...","date":"YYYY-MM-DD","start_time":"HH:MM or null","end_time":"HH:MM or null","timezone":"IANA timezone or null","location":"... or null","description":"... or null","url":"https://... or null","geo":"lat;lon or null","attachments":["https://..."],"recurrence_rule":"RRULE:FREQ=WEEKLY;... or null","recurrence_id":"YYYY-MM-DDTHH:MM:SS or null","exdates":["YYYY-MM-DD",...],"alerts":[minutes_before,...]}]}\n'
         "Rules: Return ONLY JSON. Use 24-hour time. If no time, set start_time/end_time to null.\n"
         "If multiple events are present, return multiple items in events.\n"
+        "Capture all user-provided details and place them in the most logical fields; do not omit useful details.\n"
+        "Do not invent URLs or links. Set url to null unless a real link appears in user text.\n"
+        "Write professional, properly-cased titles and concise useful descriptions.\n"
+        "Avoid titles that are too generic or too specific.\n"
         "Alerts policy: unless user explicitly asks for no reminders, include 2-3 sensible alerts per event.\n"
         "Prefer 1 week, 1 day, and 1 hour before when timeline allows.\n"
-        "If event is too soon, replace missed windows with multiple shorter reminders (for example 12h, 3h, 1h, or 30m).\n"
+        "If event is too soon for those windows, replace missed windows with near-term alerts (for example 12h, 6h, 3h, 1h, 30m) based on remaining time.\n"
         "Always return alert offsets in minutes in the alerts array.\n"
         f"User text:\n{user_text}"
     )
