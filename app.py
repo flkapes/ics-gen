@@ -21,6 +21,26 @@ DB_PATH = BASE_DIR / "events.db"
 app = FastAPI(title="Family Calendar Capture")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
+DEFAULT_TIMED_EVENT_MINUTES = 60
+DEFAULT_ALL_DAY_ALERTS = [1440, 540]
+DEFAULT_TIMED_EVENT_ALERTS = [10080, 1440, 60]
+NEAR_TERM_ALERT_CANDIDATES = [720, 360, 180, 60, 30, 10]
+REMOTE_LOCATION_VALUES = {"remote", "online", "virtual", "video call", "video conference", "web conference"}
+VIRTUAL_LOCATION_PATTERNS = [
+    ("Zoom", re.compile(r"\bzoom(?:\.us)?\b", re.IGNORECASE)),
+    ("Google Meet", re.compile(r"\b(?:google\s+meet|meet\.google\.com|gmeet)\b", re.IGNORECASE)),
+    ("Microsoft Teams", re.compile(r"\b(?:microsoft\s+teams|ms\s+teams|teams\.microsoft\.com|teams\s+meeting)\b", re.IGNORECASE)),
+    ("Cisco Webex", re.compile(r"\b(?:webex|cisco\s+webex)\b", re.IGNORECASE)),
+    ("FaceTime", re.compile(r"\bfacetime\b", re.IGNORECASE)),
+    ("Skype", re.compile(r"\bskype\b", re.IGNORECASE)),
+    ("GoTo Meeting", re.compile(r"\b(?:gotomeeting|go to meeting)\b", re.IGNORECASE)),
+    ("BlueJeans", re.compile(r"\bbluejeans\b", re.IGNORECASE)),
+    ("Discord", re.compile(r"\bdiscord(?:\.gg|\.com)?\b", re.IGNORECASE)),
+    ("Slack Huddle", re.compile(r"\b(?:slack\s+huddle|huddle)\b", re.IGNORECASE)),
+]
+URL_PATTERN = re.compile(r"https?://[^\s<>()\"']+", re.IGNORECASE)
+NO_REMINDER_PATTERN = re.compile(r"\b(?:no|without|skip|omit|disable)\s+(?:alerts?|reminders?|notifications?)\b|\b(?:do not|don't)\s+(?:alert|remind|notify)\b", re.IGNORECASE)
+
 
 def humanize_alerts(alerts: list[int] | None) -> str | None:
     if not alerts:
@@ -240,6 +260,110 @@ def normalize_description(description: str | None, title: str) -> str | None:
     return f"Auto-created calendar entry for {title}."
 
 
+def parse_time(value: str | None) -> dt.time | None:
+    if not value:
+        return None
+    try:
+        return dt.time.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def add_minutes_to_time(time_value: str, minutes: int) -> str | None:
+    parsed = parse_time(time_value)
+    if not parsed:
+        return None
+    combined = dt.datetime.combine(dt.date.today(), parsed) + dt.timedelta(minutes=minutes)
+    return combined.time().strftime("%H:%M")
+
+
+def event_start_datetime(event: Event) -> dt.datetime | None:
+    try:
+        event_date = dt.date.fromisoformat(event.date)
+    except ValueError:
+        return None
+    start = parse_time(event.start_time) or dt.time.min
+    return dt.datetime.combine(event_date, start)
+
+
+def deterministic_alerts(event: Event, now: dt.datetime | None = None) -> list[int] | None:
+    if not event.date:
+        return None
+    now = now or dt.datetime.now()
+    start = event_start_datetime(event)
+    if not start:
+        return None
+
+    candidates = DEFAULT_TIMED_EVENT_ALERTS if event.start_time else DEFAULT_ALL_DAY_ALERTS
+    minutes_until = int((start - now).total_seconds() // 60)
+    chosen = [minutes for minutes in candidates if minutes < minutes_until]
+
+    if len(chosen) < 2 and minutes_until > 15:
+        for minutes in NEAR_TERM_ALERT_CANDIDATES:
+            if minutes < minutes_until and minutes not in chosen:
+                chosen.append(minutes)
+            if len(chosen) >= 2:
+                break
+
+    return sorted(set(chosen[:3]), reverse=True) or None
+
+
+def clean_alerts(alerts: list[int] | None) -> list[int] | None:
+    if not alerts:
+        return None
+    values = sorted({int(v) for v in alerts if int(v) > 0}, reverse=True)
+    return values or None
+
+
+def first_url_for_platform(text: str, label: str) -> str | None:
+    for url in URL_PATTERN.findall(text):
+        lowered = url.lower().rstrip(".,;)")
+        if label == "Zoom" and "zoom" in lowered:
+            return lowered
+        if label == "Google Meet" and "meet.google" in lowered:
+            return lowered
+        if label == "Microsoft Teams" and "teams.microsoft" in lowered:
+            return lowered
+        if label == "Cisco Webex" and "webex" in lowered:
+            return lowered
+        if label == "Discord" and ("discord.gg" in lowered or "discord.com" in lowered):
+            return lowered
+        if label == "GoTo Meeting" and "gotomeeting" in lowered:
+            return lowered
+        if label == "BlueJeans" and "bluejeans" in lowered:
+            return lowered
+    return None
+
+
+def extract_virtual_location(text: str) -> tuple[str | None, str | None]:
+    for label, pattern in VIRTUAL_LOCATION_PATTERNS:
+        if pattern.search(text):
+            url = first_url_for_platform(text, label)
+            return (f"{label}: {url}" if url else label), url
+    return None, None
+
+
+def apply_event_policies(events: list[Event], source_text: str) -> list[Event]:
+    no_reminders = bool(NO_REMINDER_PATTERN.search(source_text))
+    virtual_location, virtual_url = extract_virtual_location(source_text)
+
+    for event in events:
+        if event.start_time and not event.end_time:
+            event.end_time = add_minutes_to_time(event.start_time, DEFAULT_TIMED_EVENT_MINUTES)
+
+        if virtual_location:
+            if not event.location or event.location.strip().lower() in REMOTE_LOCATION_VALUES:
+                event.location = virtual_location
+            if virtual_url and not event.url:
+                event.url = virtual_url
+        elif event.location and event.location.strip().lower() in REMOTE_LOCATION_VALUES:
+            event.location = None
+
+        event.alerts = None if no_reminders else clean_alerts(event.alerts) or deterministic_alerts(event)
+
+    return events
+
+
 def extract_json(text: str) -> dict[str, Any]:
     match = re.search(r"\{.*\}", text, flags=re.DOTALL)
     if not match:
@@ -258,12 +382,13 @@ def build_prompt(user_text: str) -> str:
         "If multiple events are present, return multiple items in events.\n"
         "Capture all user-provided details and place them in the most logical fields; do not omit useful details.\n"
         "Do not invent URLs or links. Set url to null unless a real link appears in user text.\n"
+        "If a remote meeting service is named or linked (Zoom, Google Meet, Microsoft Teams, Webex, FaceTime, Skype, GoTo Meeting, BlueJeans, Discord, Slack huddle, or similar), put the exact service/link in location; never replace it with Remote/Online/Virtual.\n"
+        "If no time is specified, set start_time/end_time to null because the app will treat it as all-day.\n"
+        "If a start time is specified but no end time or duration is specified, leave end_time null because the app will apply its default duration.\n"
         "Write professional, properly-cased titles and concise useful descriptions.\n"
         "Avoid titles that are too generic or too specific.\n"
-        "Alerts policy: unless user explicitly asks for no reminders, include 2-3 sensible alerts per event.\n"
-        "Prefer 1 week, 1 day, and 1 hour before when timeline allows.\n"
-        "If event is too soon for those windows, replace missed windows with near-term alerts (for example 12h, 6h, 3h, 1h, 30m) based on remaining time.\n"
-        "Always return alert offsets in minutes in the alerts array.\n"
+        "Alerts policy: only return alert offsets that the user explicitly requested. If no reminders are mentioned, use an empty alerts array so the app can apply deterministic defaults.\n"
+        "Always return explicit alert offsets in minutes in the alerts array.\n"
         f"User text:\n{user_text}"
     )
 
@@ -321,7 +446,8 @@ def parse_with_provider(provider: str, text: str) -> list[Event]:
         raise ValueError("Provider must be openai, anthropic, or ollama")
     payload = extract_json(raw)
     events = [normalize_event(ev) for ev in payload.get("events", [])]
-    return [e for e in events if e.name and e.date]
+    events = [e for e in events if e.name and e.date]
+    return apply_event_policies(events, text)
 
 
 def write_events(events: Iterable[Event]) -> None:

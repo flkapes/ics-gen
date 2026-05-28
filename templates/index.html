@@ -241,7 +241,7 @@
         <div class="quick-link-items" id="quick-link-items">
           <a class="pill" href="/calendar.ics" aria-label="Open calendar feed">Calendar feed: <strong>/calendar.ics</strong></a>
           <button class="pill" type="button" onclick="copyFeedUrl()">Copy feed URL</button>
-          <a class="pill" href="webcal://{{ request.url.hostname }}{% if request.url.port %}:{{ request.url.port }}{% endif %}/calendar.ics" aria-label="Add to Apple Calendar">Add to Apple Calendar</a>
+          <a class="pill" href="{{ request.url.scheme }}://{{ request.url.hostname }}{% if request.url.port %}:{{ request.url.port }}{% endif %}/calendar.ics" aria-label="Open HTTP calendar subscription feed">Apple Calendar URL</a>
           <a class="pill" href="/shortcuts/add?text=Soccer%20practice%20every%20Tuesday%20at%206pm%20next%20month" aria-label="Shortcut-friendly add endpoint">Siri Shortcut sample</a>
           <button class="pill" type="button" onclick="document.getElementById('saved-events-card').classList.toggle('is-open')">Saved events</button>
         </div>
