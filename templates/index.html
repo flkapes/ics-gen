@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Family Calendar Capture</title>
+  <meta name="description" content="Convert family plans into Apple Calendar events in one message." />
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+  <style>
+    :root {
+      --bg: #070b17;
+      --surface: #121933c7;
+      --surface-strong: #0f1730;
+      --text: #eef3ff;
+      --muted: #a6b2d9;
+      --line: #ffffff26;
+      --accent-a: #7c3aed;
+      --accent-b: #06b6d4;
+      --good: #34d399;
+      --danger: #fb7185;
+      --radius: 18px;
+      --shadow: 0 24px 70px rgba(0, 0, 0, .45);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      min-height: 100dvh;
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background:
+        radial-gradient(50rem 50rem at 0% -10%, #4c1d9545 0, #4c1d9500 58%),
+        radial-gradient(35rem 35rem at 100% -15%, #0891b240 0, #0891b200 62%),
+        linear-gradient(140deg, #050813, var(--bg));
+      padding: clamp(14px, 3vw, 34px);
+      line-height: 1.45;
+    }
+
+    .mesh {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .45;
+      background-image: linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: radial-gradient(circle at 50% 0%, #000 30%, transparent 85%);
+    }
+
+    .app { max-width: 1080px; margin: 0 auto; display: grid; gap: 16px; position: relative; z-index: 1; }
+    .card {
+      background: linear-gradient(160deg, #ffffff1f, #ffffff08);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      backdrop-filter: blur(12px);
+      padding: clamp(14px, 2vw, 24px);
+    }
+
+    h1 { margin: 0 0 8px; font-size: clamp(1.5rem, 3.3vw, 2.5rem); letter-spacing: -.03em; }
+    h2 { margin: 0 0 10px; font-size: clamp(1.1rem, 1.8vw, 1.35rem); }
+    p { margin: 0; color: var(--muted); }
+
+    .pill {
+      display: inline-flex;
+      margin-top: 10px;
+      align-items: center;
+      gap: 8px;
+      font-size: .85rem;
+      border: 1px solid #ffffff26;
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: #d6dcf7;
+      background: #0a1022aa;
+    }
+
+    form { display: grid; gap: 12px; }
+    label { font-size: .95rem; color: #dbe5ff; font-weight: 600; }
+
+    textarea {
+      width: 100%;
+      min-height: clamp(200px, 35vh, 340px);
+      border-radius: 14px;
+      border: 1px solid #ffffff2e;
+      background: linear-gradient(180deg, #0b1229f2, #091024d9);
+      color: var(--text);
+      padding: 14px;
+      font: inherit;
+      resize: vertical;
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    textarea:focus-visible {
+      outline: 0;
+      border-color: #a78bfa;
+      box-shadow: 0 0 0 3px #8b5cf655;
+    }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .btn {
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 700;
+      padding: .8rem 1.2rem;
+      transition: transform .12s ease, filter .2s ease, box-shadow .2s ease;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary {
+      color: white;
+      background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
+      box-shadow: 0 10px 24px #06b6d452;
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+    .btn-primary::after {
+      content: "";
+      position: absolute;
+      inset: -250% -30%;
+      z-index: -1;
+      background: linear-gradient(120deg, #fff0 42%, #ffffff55 50%, #fff0 58%);
+      animation: sheen 2.8s linear infinite;
+    }
+    .btn-secondary {
+      color: #e4eaff;
+      background: #ffffff14;
+      border-color: #ffffff2e;
+    }
+    .btn:hover { filter: brightness(1.08); }
+
+    @keyframes sheen { to { transform: translateX(40%) translateY(40%); } }
+
+    .preview-shell { min-height: 82px; display: grid; gap: 8px; }
+    .preview-item {
+      border: 1px solid #ffffff1f;
+      background: #060b1dcc;
+      border-radius: 12px;
+      padding: 10px 12px;
+      color: #dbe7ff;
+      animation: rise .22s ease;
+    }
+    .meta { color: #9fb0e7; font-size: .9rem; margin-top: 4px; }
+    .error {
+      color: #ffe4ea;
+      background: #88133788;
+      border: 1px solid #fb718588;
+      border-radius: 12px;
+      padding: 11px 12px;
+    }
+    @keyframes rise { from { opacity: 0; transform: translateY(4px);} to {opacity:1;transform:translateY(0);} }
+
+    .event-list { display: grid; gap: 8px; }
+    .event-item { border: 1px solid #ffffff1a; border-radius: 12px; padding: 11px 12px; background: #070d21c7; }
+    a { color: #c4b5fd; }
+
+    @media (max-width: 680px) { .btn { width: 100%; } }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="mesh" aria-hidden="true"></div>
+  <main class="app">
+    <section class="card">
+      <h1>Family Calendar, one message away.</h1>
+      <p>Paste rough ideas, copied emails, or multiple plans. Preview extraction before saving.</p>
+      <div class="pill">Provider: <strong>{{ provider }}</strong> · Feed: <a href="/calendar.ics">/calendar.ics</a></div>
+    </section>
+
+    <section class="card">
+      <form method="post" action="/save" aria-label="Event capture form">
+        <label for="event_text">Event details</label>
+        <textarea id="event_text" name="event_text" required placeholder="Dinner Friday 7pm at Bistro Lumière. Also soccer practice every Tuesday at 6pm next month. Remind us 1 day and 30 minutes before."></textarea>
+        <div class="actions">
+          <button class="btn btn-secondary" type="button" hx-post="/preview" hx-include="#event_text" hx-target="#preview" hx-swap="innerHTML">Live Preview</button>
+          <button class="btn btn-primary" type="submit">Save to Calendar</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card" id="preview" aria-live="polite">
+      <div class="preview-shell"><p>Live preview appears here.</p></div>
+    </section>
+
+    <section class="card">
+      <h2>Saved events</h2>
+      <div class="event-list">
+        {% for e in events %}
+          <article class="event-item"><strong>{{ e['name'] }}</strong><div class="meta">{{ e['date'] }}{% if e['start_time'] %} · {{ e['start_time'] }}{% endif %}{% if e['end_time'] %}–{{ e['end_time'] }}{% endif %}</div></article>
+        {% else %}
+          <p>No events yet.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+</body>
+</html>

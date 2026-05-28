@@ -1,0 +1,16 @@
+<div class="preview-shell">
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% elif events %}
+    {% for e in events %}
+      <article class="preview-item">
+        <strong>{{ e.name }}</strong>
+        <div class="meta">{{ e.date }}{% if e.start_time %} · {{ e.start_time }}{% endif %}{% if e.end_time %}–{{ e.end_time }}{% endif %}</div>
+        {% if e.location %}<div class="meta">📍 {{ e.location }}</div>{% endif %}
+        {% if e.alerts %}<div class="meta">⏰ Alerts: {{ e.alerts|join(', ') }} minutes before</div>{% endif %}
+      </article>
+    {% endfor %}
+  {% else %}
+    <p>No events detected yet.</p>
+  {% endif %}
+</div>
