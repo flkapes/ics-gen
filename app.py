@@ -44,6 +44,74 @@ def humanize_alerts(alerts: list[int] | None) -> str | None:
 templates.env.globals["humanize_alerts"] = humanize_alerts
 
 
+def humanize_rrule(rule: str | None) -> str | None:
+    if not rule:
+        return None
+    raw = rule.strip()
+    if raw.startswith("RRULE:"):
+        raw = raw.split(":", 1)[1]
+
+    parts: dict[str, str] = {}
+    for item in raw.split(";"):
+        if "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        parts[key.strip().upper()] = value.strip()
+
+    freq_map = {
+        "DAILY": "Daily",
+        "WEEKLY": "Weekly",
+        "MONTHLY": "Monthly",
+        "YEARLY": "Yearly",
+    }
+    day_map = {"MO": "Mon", "TU": "Tue", "WE": "Wed", "TH": "Thu", "FR": "Fri", "SA": "Sat", "SU": "Sun"}
+
+    freq = freq_map.get(parts.get("FREQ", "").upper())
+    if not freq:
+        return rule
+
+    chunks: list[str] = [freq]
+    interval = parts.get("INTERVAL")
+    if interval and interval.isdigit() and int(interval) > 1:
+        unit_map = {'DAILY': 'day', 'WEEKLY': 'week', 'MONTHLY': 'month', 'YEARLY': 'year'}
+        unit = unit_map.get(parts.get('FREQ', '').upper(), 'interval')
+        chunks.append(f"every {interval} {unit}s")
+
+    byday = parts.get("BYDAY")
+    if byday:
+        days = [day_map.get(d.strip().upper(), d.strip().upper()) for d in byday.split(",") if d.strip()]
+        if days:
+            chunks.append("on " + ", ".join(days))
+
+    bymonthday = parts.get("BYMONTHDAY")
+    if bymonthday:
+        chunks.append(f"on day {bymonthday} of the month")
+
+    until = parts.get("UNTIL")
+    if until:
+        until_text = until
+        try:
+            cleaned = until.rstrip("Z")
+            if "T" in cleaned:
+                until_dt = dt.datetime.strptime(cleaned, "%Y%m%dT%H%M%S")
+                until_text = until_dt.strftime("%b %-d, %Y %-I:%M %p")
+            else:
+                until_date = dt.datetime.strptime(cleaned, "%Y%m%d").date()
+                until_text = until_date.strftime("%b %-d, %Y")
+        except ValueError:
+            until_text = until
+        chunks.append(f"until {until_text}")
+
+    count = parts.get("COUNT")
+    if count:
+        chunks.append(f"for {count} occurrence{'s' if count != '1' else ''}")
+
+    return " · ".join(chunks)
+
+
+templates.env.globals["humanize_rrule"] = humanize_rrule
+
+
 def load_dotenv_file(path: Path) -> None:
     if not path.exists():
         return
