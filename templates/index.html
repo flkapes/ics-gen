@@ -126,14 +126,65 @@
       border-radius: var(--radius-md);
       padding: 12px 14px;
     }
+    .preview-header .title { font-size: 1.03rem; font-weight: 650; }
+    .preview-header .today { color: var(--apple-red); font-size: .82rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
 
     .meta { color: var(--muted); font-size: .89rem; margin-top: 4px; }
+    .preview-item .event-title {
+      font-size: 1rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+    .preview-item .meta-row {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: 6px;
+      align-items: start;
+    }
+    .preview-item .meta-label {
+      color: #d2d3d8;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      font-size: .7rem;
+      font-weight: 700;
+    }
+    .preview-item .meta-value {
+      color: #f2f2f5;
+      font-size: .88rem;
+    }
     .error {
       color: #ffeceb; background: #5e1714; border: 1px solid #ff7b73;
       border-radius: var(--radius-md); padding: 11px 12px;
     }
 
     .saved { grid-column: 1 / -1; }
+    .saved details > summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #31343c;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+    .saved details > summary::-webkit-details-marker { display: none; }
+    .saved details > summary::after {
+      content: "Show";
+      color: var(--apple-red);
+      font-size: .82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+    }
+    .saved details[open] > summary::after { content: "Hide"; }
+    .saved .saved-title {
+      margin: 0;
+      font-size: 1.28rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
     .event-list { display: grid; gap: 10px; }
     a { color: #ff6f66; }
 
@@ -169,7 +220,7 @@
             required
             placeholder="Dinner Friday 7pm at Bistro Lumière. Also soccer practice every Tuesday at 6pm next month. Remind us 1 day and 30 minutes before."
             hx-post="/preview"
-            hx-trigger="input changed delay:350ms"
+            hx-trigger="input changed delay:900ms"
             hx-target="#preview-results"
             hx-swap="innerHTML"></textarea>
           <div class="actions">
@@ -187,14 +238,16 @@
       </section>
 
       <section class="card saved">
-        <h2>Saved events</h2>
-        <div class="event-list">
-          {% for e in events %}
-            <article class="event-item"><strong>{{ e['name'] }}</strong><div class="meta">{{ e['date'] }}{% if e['start_time'] %} · {{ e['start_time'] }}{% endif %}{% if e['end_time'] %}–{{ e['end_time'] }}{% endif %}{% if e['recurrence_rule'] %} · Repeats{% endif %}</div>{% if e['url'] %}<div class="meta">🔗 <a href="{{ e['url'] }}" target="_blank" rel="noopener noreferrer">Open event link</a></div>{% endif %}</article>
-          {% else %}
-            <p>No events yet.</p>
-          {% endfor %}
-        </div>
+        <details>
+          <summary><span class="saved-title">Saved events</span></summary>
+          <div class="event-list">
+            {% for e in events %}
+              <article class="event-item"><strong>{{ e['name'] }}</strong><div class="meta">{{ e['date'] }}{% if e['start_time'] %} · {{ e['start_time'] }}{% endif %}{% if e['end_time'] %}–{{ e['end_time'] }}{% endif %}{% if e['recurrence_rule'] %} · Repeats{% endif %}</div>{% if e['url'] %}<div class="meta">🔗 <a href="{{ e['url'] }}" target="_blank" rel="noopener noreferrer">Open event link</a></div>{% endif %}</article>
+            {% else %}
+              <p>No events yet.</p>
+            {% endfor %}
+          </div>
+        </details>
       </section>
     </section>
   </main>
