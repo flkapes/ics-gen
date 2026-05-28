@@ -12,13 +12,22 @@ from typing import Any, Iterable
 
 import requests
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 BASE_DIR = Path(__file__).parent
 DB_PATH = BASE_DIR / "events.db"
+STATIC_DIR = BASE_DIR / "static"
+ICON_FILE_NAMES = {
+    "favicon.ico",
+    "favicon.png",
+    "apple-touch-icon.png",
+    "apple-touch-icon-precomposed.png",
+}
 
 app = FastAPI(title="Family Calendar Capture")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR), check_dir=False), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 DEFAULT_TIMED_EVENT_MINUTES = 60
@@ -554,6 +563,34 @@ def fetch_rows() -> list[sqlite3.Row]:
 def startup() -> None:
     init_db()
 
+
+def static_icon_response(file_name: str) -> Response:
+    if file_name not in ICON_FILE_NAMES:
+        return Response(status_code=404)
+    path = STATIC_DIR / file_name
+    if not path.is_file():
+        return Response(status_code=404)
+    return FileResponse(path)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon_ico() -> Response:
+    return static_icon_response("favicon.ico")
+
+
+@app.get("/favicon.png", include_in_schema=False)
+def favicon_png() -> Response:
+    return static_icon_response("favicon.png")
+
+
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+def apple_touch_icon() -> Response:
+    return static_icon_response("apple-touch-icon.png")
+
+
+@app.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
+def apple_touch_icon_precomposed() -> Response:
+    return static_icon_response("apple-touch-icon-precomposed.png")
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
