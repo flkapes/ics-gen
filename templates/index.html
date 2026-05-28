@@ -8,46 +8,21 @@
   <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
   <style>
     :root {
-      color-scheme: light dark;
-      --bg: #f6f8ff;
-      --bg-soft: #eaf0ff;
-      --surface: #ffffffcc;
-      --surface-strong: #ffffff;
-      --surface-elevated: #f1f5ffeb;
-      --text: #0f172a;
-      --muted: #4b5b82;
-      --line: #1e293b1f;
-      --line-strong: #4c5f8f5c;
-      --accent-a: #7c3aed;
-      --accent-b: #0891b2;
-      --accent-c: #db2777;
-      --good: #059669;
-      --warning: #ca8a04;
-      --danger: #e11d48;
+      color-scheme: dark;
+      --bg: #000;
+      --surface: #101113;
+      --surface-elevated: #1a1b1f;
+      --line: #2f3138;
+      --text: #f5f5f7;
+      --muted: #9ea0a8;
+      --apple-red: #ff3b30;
+      --apple-red-soft: #ff453a;
+      --radius-xl: 28px;
       --radius-lg: 20px;
       --radius-md: 14px;
       --radius-pill: 999px;
-      --shadow: 0 28px 90px rgba(0, 0, 0, .42);
-      --focus-ring: 0 0 0 3px #8b5cf66e;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #040713;
-        --bg-soft: #0b1330;
-        --surface: #0f1938cc;
-        --surface-strong: #101b3f;
-        --surface-elevated: #162655f2;
-        --text: #f4f7ff;
-        --muted: #b9c6ef;
-        --line: #ffffff29;
-        --line-strong: #c6d1ff52;
-        --accent-a: #8b5cf6;
-        --accent-b: #22d3ee;
-        --accent-c: #f472b6;
-        --good: #34d399;
-        --warning: #fbbf24;
-        --danger: #fb7185;
-      }
+      --focus: 0 0 0 3px #ff3b306b;
+      --shadow: 0 20px 44px rgba(0,0,0,.5);
     }
 
     * { box-sizing: border-box; }
@@ -56,245 +31,203 @@
     body {
       min-height: 100dvh;
       color: var(--text);
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background:
-        radial-gradient(55rem 55rem at -4% -14%, #8b5cf62e 0, #8b5cf600 62%),
-        radial-gradient(40rem 40rem at 104% -16%, #22d3ee30 0, #22d3ee00 64%),
-        linear-gradient(160deg, #030611, var(--bg));
-      line-height: 1.5;
-      padding: clamp(16px, 2.8vw, 34px);
+        radial-gradient(42rem 42rem at 110% -8%, #ff3b3022 0, #0000 60%),
+        radial-gradient(26rem 26rem at -8% 108%, #ffffff12 0, #0000 64%),
+        var(--bg);
+      line-height: 1.45;
+      padding: clamp(16px, 3vw, 36px);
     }
 
-    .mesh {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      opacity: .45;
-      background-image: linear-gradient(#ffffff0d 1px, transparent 1px), linear-gradient(90deg, #ffffff0d 1px, transparent 1px);
-      background-size: 28px 28px;
-      mask-image: radial-gradient(circle at 50% -10%, #000 24%, transparent 88%);
+    .app { max-width: 1180px; margin: 0 auto; display: grid; gap: 16px; }
+
+    .hero {
+      padding: clamp(16px, 2.1vw, 24px);
+      border-radius: var(--radius-xl);
+      border: 1px solid #2a2c33;
+      background: linear-gradient(180deg, #1b1c21d9, #0f1014f2);
+      box-shadow: var(--shadow);
     }
 
-    .aurora {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      opacity: .55;
-      filter: blur(64px);
-      background:
-        radial-gradient(24rem 24rem at 22% 84%, #7c3aed66, transparent 72%),
-        radial-gradient(30rem 30rem at 82% 70%, #22d3ee50, transparent 75%),
-        radial-gradient(24rem 24rem at 45% 12%, #f472b644, transparent 75%);
-      z-index: 0;
-    }
+    .hero-top { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .window-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff5f57; }
+    .window-dot:nth-child(2) { background: #febc2e; }
+    .window-dot:nth-child(3) { background: #28c840; }
 
-    .app {
-      max-width: 1120px;
-      margin: 0 auto;
+    .hero h1 { margin: 0 0 6px; font-size: clamp(1.55rem, 3.2vw, 2.4rem); letter-spacing: -0.03em; }
+    .hero p { margin: 0; color: var(--muted); max-width: 78ch; }
+
+    .meta-row { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 10px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      border: 1px solid #3a3d45; border-radius: var(--radius-pill);
+      background: #1a1c21; padding: 6px 12px; color: var(--text);
+      font-size: .84rem; text-decoration: none;
+    }
+    .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--apple-red); box-shadow: 0 0 10px #ff3b30aa; }
+
+    .workspace {
       display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, .95fr);
       gap: 16px;
-      position: relative;
-      z-index: 1;
+      align-items: start;
     }
 
     .card {
-      background: linear-gradient(165deg, color-mix(in oklab, var(--surface), #fff 8%), color-mix(in oklab, var(--surface), transparent 28%));
+      border-radius: var(--radius-xl);
       border: 1px solid var(--line);
-      border-radius: var(--radius-lg);
+      background: linear-gradient(180deg, #17191ddb, #111216f2);
       box-shadow: var(--shadow);
-      backdrop-filter: blur(14px);
-      padding: clamp(15px, 2vw, 24px);
+      padding: clamp(16px, 2vw, 24px);
     }
 
-    .hero h1 { margin: 0 0 8px; font-size: clamp(1.6rem, 3.4vw, 2.7rem); letter-spacing: -.03em; }
-    .hero p { margin: 0; color: var(--muted); max-width: 70ch; }
-
-    .meta-row {
-      margin-top: 12px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-    }
-
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-size: .86rem;
-      border: 1px solid color-mix(in oklab, var(--line-strong), transparent 20%);
-      border-radius: var(--radius-pill);
-      padding: 6px 12px;
-      color: color-mix(in oklab, var(--text), white 20%);
-      background: color-mix(in oklab, var(--surface-strong), transparent 12%);
-      text-decoration: none;
-    }
-
-    .pill .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
-      box-shadow: 0 0 12px #8b5cf6;
-    }
-
-    h2 { margin: 0 0 10px; font-size: clamp(1.1rem, 1.9vw, 1.35rem); }
-    label { display: block; margin-bottom: 6px; font-size: .96rem; color: color-mix(in oklab, var(--text), white 15%); font-weight: 600; }
-
-    .form-grid { display: grid; gap: 12px; }
+    .card h2 { margin: 0 0 12px; letter-spacing: -0.01em; }
+    label { display: block; margin-bottom: 6px; font-weight: 600; }
+    .supporting { color: var(--muted); font-size: .93rem; margin-top: 4px; }
 
     textarea {
-      width: 100%;
-      min-height: clamp(210px, 35vh, 340px);
-      border-radius: var(--radius-md);
-      border: 1px solid var(--line-strong);
-      background: linear-gradient(180deg, color-mix(in oklab, var(--surface-strong), white 5%), color-mix(in oklab, var(--surface-elevated), var(--bg) 16%));
-      color: var(--text);
-      padding: 14px;
-      font: inherit;
-      resize: vertical;
-      transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+      width: 100%; min-height: clamp(220px, 44vh, 420px);
+      border-radius: var(--radius-lg); border: 1px solid #3a3d45;
+      background: #08090b; color: var(--text);
+      padding: 14px; font: inherit; resize: vertical;
+      transition: border-color .18s ease, box-shadow .2s ease;
     }
+    textarea::placeholder { color: #8e9098; }
+    textarea:focus-visible { outline: none; border-color: var(--apple-red); box-shadow: var(--focus); }
 
-    textarea::placeholder { color: color-mix(in oklab, var(--muted), transparent 14%); }
-    textarea:focus-visible {
-      outline: none;
-      border-color: color-mix(in oklab, var(--accent-a), white 30%);
-      box-shadow: var(--focus-ring);
-      transform: translateY(-1px);
-    }
-
-    .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-
+    .actions { margin-top: 12px; display: flex; gap: 10px; }
     .btn {
-      appearance: none;
-      border: 1px solid transparent;
-      border-radius: var(--radius-pill);
-      cursor: pointer;
-      font-weight: 700;
-      padding: .83rem 1.24rem;
-      transition: transform .12s ease, filter .18s ease, box-shadow .2s ease;
+      appearance: none; border: 1px solid transparent; cursor: pointer;
+      border-radius: var(--radius-pill); padding: .8rem 1.2rem;
+      font-weight: 700; transition: filter .15s ease, transform .12s ease;
     }
-
     .btn:active { transform: translateY(1px); }
-    .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+    .btn-primary { color: #fff; background: linear-gradient(180deg, var(--apple-red-soft), var(--apple-red)); box-shadow: 0 10px 22px #ff3b304d; }
 
-    .btn-primary {
-      color: white;
-      background: linear-gradient(95deg, var(--accent-a), var(--accent-b));
-      box-shadow: 0 12px 30px #22d3ee4f;
-      position: relative;
-      overflow: hidden;
-      isolation: isolate;
+    #preview {
+      background: linear-gradient(180deg, #1a1b20, #101115);
+      position: sticky;
+      top: 16px;
     }
 
-    .btn-primary::after {
-      content: "";
-      position: absolute;
-      inset: -240% -30%;
-      z-index: -1;
-      background: linear-gradient(120deg, #fff0 42%, #ffffff50 50%, #fff0 58%);
-      animation: sheen 2.8s linear infinite;
+    .preview-header {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #31343c;
+    }
+    .preview-header .title { font-size: 1.03rem; font-weight: 650; }
+    .preview-header .today { color: var(--apple-red); font-size: .82rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+
+    .preview-shell { min-height: 96px; display: grid; gap: 10px; }
+    .preview-item, .event-item {
+      border: 1px solid #393c45;
+      border-left: 4px solid var(--apple-red);
+      background: linear-gradient(180deg, #1d2026, #16181d);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
     }
 
-    .btn-secondary {
-      color: color-mix(in oklab, var(--text), white 22%);
-      background: color-mix(in oklab, var(--surface), transparent 20%);
-      border-color: color-mix(in oklab, var(--line-strong), transparent 20%);
+    .meta { color: var(--muted); font-size: .89rem; margin-top: 4px; }
+    .preview-item .event-title {
+      font-size: 1rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
     }
-
-    .btn:hover { filter: brightness(1.08); }
-    @keyframes sheen { to { transform: translateX(40%) translateY(40%); } }
-
-    .supporting {
-      color: var(--muted);
-      font-size: .93rem;
-      margin-top: 4px;
+    .preview-item .meta-row {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: 6px;
+      align-items: start;
     }
-
-    .preview-shell { min-height: 86px; display: grid; gap: 9px; }
-    .preview-item {
-      border: 1px solid color-mix(in oklab, var(--line-strong), transparent 22%);
-      background: linear-gradient(180deg, color-mix(in oklab, var(--surface-strong), white 8%), color-mix(in oklab, var(--surface-elevated), var(--bg) 25%));
-      border-radius: 12px;
-      padding: 11px 13px;
-      color: color-mix(in oklab, var(--text), white 16%);
-      animation: rise .22s ease;
+    .preview-item .meta-label {
+      color: #d2d3d8;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      font-size: .7rem;
+      font-weight: 700;
     }
-
-    .meta { color: var(--muted); font-size: .9rem; margin-top: 4px; }
+    .preview-item .meta-value {
+      color: #f2f2f5;
+      font-size: .88rem;
+    }
     .error {
-      color: #ffeaf0;
-      background: #8813378e;
-      border: 1px solid #fb71859b;
-      border-radius: 12px;
-      padding: 11px 12px;
+      color: #ffeceb; background: #5e1714; border: 1px solid #ff7b73;
+      border-radius: var(--radius-md); padding: 11px 12px;
     }
 
-    @keyframes rise { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
-
-    .event-list { display: grid; gap: 9px; }
-    .event-item {
-      border: 1px solid color-mix(in oklab, var(--line-strong), transparent 24%);
-      border-radius: 12px;
-      padding: 12px;
-      background: linear-gradient(180deg, color-mix(in oklab, var(--surface-strong), white 9%), color-mix(in oklab, var(--surface-elevated), var(--bg) 28%));
+    .saved { grid-column: 1 / -1; display: none; }
+    .saved.is-open { display: block; }
+    .saved .saved-title {
+      margin: 0 0 12px;
+      font-size: 1.28rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
     }
+    .event-list { display: grid; gap: 10px; }
+    a { color: #ff6f66; }
 
-    a { color: color-mix(in oklab, var(--accent-a), white 18%); }
-    a:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 4px; }
-
-    @media (max-width: 680px) { .btn { width: 100%; } }
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { animation: none !important; transition: none !important; }
-      textarea:focus-visible { transform: none; }
+    @media (max-width: 900px) {
+      .workspace { grid-template-columns: 1fr; }
+      #preview { position: static; }
+      .hero p, .provider-pill { display: none; }
     }
   </style>
 </head>
 <body>
-  <div class="mesh" aria-hidden="true"></div>
-  <div class="aurora" aria-hidden="true"></div>
-
   <main class="app">
-    <section class="card hero">
+    <section class="hero">
+      <div class="hero-top" aria-hidden="true"><span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span></div>
       <h1>Family Calendar, one message away.</h1>
       <p>Drop in rough notes, pasted emails, or a week of plans. Add links for Maps, Zoom, school portals, or docs to make events instantly actionable in Apple Calendar.</p>
       <div class="meta-row">
-        <span class="pill"><span class="dot" aria-hidden="true"></span>Provider: <strong>{{ provider }}</strong></span>
+        <span class="pill provider-pill"><span class="dot" aria-hidden="true"></span>Provider: <strong>{{ provider }}</strong></span>
         <a class="pill" href="/calendar.ics" aria-label="Open calendar feed">Calendar feed: <strong>/calendar.ics</strong></a>
         <button class="pill" type="button" onclick="navigator.clipboard.writeText(window.location.origin + '/calendar.ics')">Copy feed URL</button>
         <a class="pill" href="webcal://{{ request.url.hostname }}{% if request.url.port %}:{{ request.url.port }}{% endif %}/calendar.ics" aria-label="Add to Apple Calendar">Add to Apple Calendar</a>
         <a class="pill" href="/shortcuts/add?text=Soccer%20practice%20every%20Tuesday%20at%206pm%20next%20month" aria-label="Shortcut-friendly add endpoint">Siri Shortcut sample</a>
+        <button class="pill" type="button" onclick="document.getElementById('saved-events-card').classList.toggle('is-open')">Saved events</button>
       </div>
     </section>
 
-    <section class="card">
-      <form method="post" action="/save" aria-label="Event capture form" class="form-grid">
-        <div>
+    <section class="workspace">
+      <section class="card">
+        <form method="post" action="/save" aria-label="Event capture form">
           <label for="event_text">Event details</label>
-          <p class="supporting">Try natural language with times, timezone, reminders, links, and exceptions: “Dinner Friday 7pm America/Los_Angeles at Bistro Lumière with menu https://example.com/menu. Soccer Tuesdays at 6pm next month, except June 10. Zoom link https://zoom.us/j/123...”</p>
-        </div>
-        <textarea id="event_text" name="event_text" required placeholder="Dinner Friday 7pm at Bistro Lumière. Also soccer practice every Tuesday at 6pm next month. Remind us 1 day and 30 minutes before."></textarea>
-        <div class="actions">
-          <button class="btn btn-secondary" type="button" hx-post="/preview" hx-include="#event_text" hx-target="#preview" hx-swap="innerHTML">Live Preview</button>
-          <button class="btn btn-primary" type="submit">Save to Calendar</button>
-        </div>
-      </form>
-    </section>
+          <p class="supporting">Type naturally and preview updates automatically while you write.</p>
+          <textarea
+            id="event_text"
+            name="event_text"
+            required
+            placeholder="Dinner Friday 7pm at Bistro Lumière. Also soccer practice every Tuesday at 6pm next month. Remind us 1 day and 30 minutes before."
+            hx-post="/preview"
+            hx-trigger="input changed delay:900ms"
+            hx-target="#preview-results"
+            hx-swap="innerHTML"></textarea>
+          <div class="actions">
+            <button class="btn btn-primary" type="submit">Save to Calendar</button>
+          </div>
+        </form>
+      </section>
 
-    <section class="card" id="preview" aria-live="polite" aria-label="Extracted preview">
-      <div class="preview-shell"><p>Live preview appears here.</p></div>
-    </section>
+      <section class="card" id="preview" aria-live="polite" aria-label="Extracted preview">
+        <div class="preview-header">
+          <span class="title">Calendar Preview</span>
+          <span class="today">Today</span>
+        </div>
+        <div id="preview-results" class="preview-shell"><p>Live preview appears here.</p></div>
+      </section>
 
-    <section class="card">
-      <h2>Saved events</h2>
-      <div class="event-list">
-        {% for e in events %}
-          <article class="event-item"><strong>{{ e['name'] }}</strong><div class="meta">{{ e['date'] }}{% if e['start_time'] %} · {{ e['start_time'] }}{% endif %}{% if e['end_time'] %}–{{ e['end_time'] }}{% endif %}{% if e['recurrence_rule'] %} · Repeats{% endif %}</div>{% if e['url'] %}<div class="meta">🔗 <a href="{{ e['url'] }}" target="_blank" rel="noopener noreferrer">Open event link</a></div>{% endif %}</article>
-        {% else %}
-          <p>No events yet.</p>
-        {% endfor %}
-      </div>
+      <section class="card saved" id="saved-events-card">
+        <h2 class="saved-title">Saved events</h2>
+        <div class="event-list">
+          {% for e in events %}
+            <article class="event-item"><strong>{{ e['name'] }}</strong><div class="meta">{{ e['date'] }}{% if e['start_time'] %} · {{ e['start_time'] }}{% endif %}{% if e['end_time'] %}–{{ e['end_time'] }}{% endif %}{% if e['recurrence_rule'] %} · Repeats{% endif %}</div>{% if e['url'] %}<div class="meta">🔗 <a href="{{ e['url'] }}" target="_blank" rel="noopener noreferrer">Open event link</a></div>{% endif %}</article>
+          {% else %}
+            <p>No events yet.</p>
+          {% endfor %}
+        </div>
+      </section>
     </section>
   </main>
 </body>

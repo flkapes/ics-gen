@@ -4,13 +4,13 @@
   {% elif events %}
     {% for e in events %}
       <article class="preview-item">
-        <strong>{{ e.name }}</strong>
-        <div class="meta">{{ e.date }}{% if e.start_time %} · {{ e.start_time }}{% endif %}{% if e.end_time %}–{{ e.end_time }}{% endif %}</div>
-        {% if e.location %}<div class="meta">📍 {{ e.location }}</div>{% endif %}
-        {% if e.url %}<div class="meta">🔗 <a href="{{ e.url }}" target="_blank" rel="noopener noreferrer">Open link</a></div>{% endif %}
-        {% if e.recurrence_rule %}<div class="meta">🔁 {{ e.recurrence_rule }}</div>{% endif %}
-        {% if e.exdates %}<div class="meta">🗓️ Except: {{ e.exdates|join(', ') }}</div>{% endif %}
-        {% if e.alerts %}<div class="meta">⏰ Alerts: {{ e.alerts|join(', ') }} minutes before</div>{% endif %}
+        <div class="event-title">{{ e.name }}</div>
+        <div class="meta-row"><span class="meta-label">When</span><span class="meta-value">{{ e.date }}{% if e.start_time %} · {{ e.start_time }}{% endif %}{% if e.end_time %}–{{ e.end_time }}{% endif %}</span></div>
+        {% if e.location %}<div class="meta-row"><span class="meta-label">Location</span><span class="meta-value">{{ e.location }}</span></div>{% endif %}
+        {% if e.url %}<div class="meta-row"><span class="meta-label">Link</span><span class="meta-value"><a href="{{ e.url }}" target="_blank" rel="noopener noreferrer">Open link</a></span></div>{% endif %}
+        {% if e.recurrence_rule %}<div class="meta-row"><span class="meta-label">Repeat</span><span class="meta-value">{{ e.recurrence_rule }}</span></div>{% endif %}
+        {% if e.exdates %}<div class="meta-row"><span class="meta-label">Except</span><span class="meta-value">{{ e.exdates|join(', ') }}</span></div>{% endif %}
+        {% if e.alerts %}<div class="meta-row"><span class="meta-label">Alerts</span><span class="meta-value">{{ humanize_alerts(e.alerts) }}</span></div>{% endif %}
       </article>
     {% endfor %}
   {% else %}
