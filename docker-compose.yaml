@@ -1,0 +1,23 @@
+services:
+  family-calendar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: family-calendar
+
+    ports:
+      - "8080:8680"
+
+    env_file:
+      - .env
+    environment:
+      CALENDAR_FEED_TOKEN: ${CALENDAR_FEED_TOKEN:?Set CALENDAR_FEED_TOKEN in .env before starting}
+      ICS_GEN_DB_PATH: /data/events.db
+
+    volumes:
+      - ./data:/data
+
+    command: ["/app/.venv/bin/uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8680"]
+
+    restart: unless-stopped
