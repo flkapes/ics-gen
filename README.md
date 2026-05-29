@@ -1,165 +1,171 @@
-# ics-gen
+# Family Calendar Capture
 
-Single-input family calendar web app with live LLM preview.
+Family Calendar Capture is a small FastAPI app that turns natural-language plans into an Apple Calendar-compatible `.ics` subscription feed. It is designed for busy households: paste a school email, type a rough weekly plan, preview the events the LLM extracted, and save them to a feed that Apple Calendar can subscribe to.
 
-## Stack choice: Flask vs FastAPI
-For this version, I migrated to **FastAPI** to better support interactive UX patterns (preview endpoint + structured form handling) while keeping performance high.
+This project is intentionally compact, but it demonstrates production-oriented decisions: provider-agnostic LLM integration, deterministic calendar normalization, token-protected feed URLs, persistent SQLite storage, tests, Docker support, and a responsive HTMX-powered interface.
 
-Why FastAPI here:
-- Clean request handling for separate preview/save endpoints.
-- Great performance with `uvicorn`.
-- Easy future expansion to JSON APIs and typed contracts.
+## Highlights
 
-## Features
-- One textarea input + submit flow.
-- Supports OpenAI, Anthropic, and Ollama (`LLM_PROVIDER`).
-- **Live preview** before saving.
-- Smooth, responsive UI with lightweight animation.
-- Apple-compatible calendar feed with multiple `VALARM` reminders and optional tokenized feed URL protection.
-- Deterministic reminder defaults: timed events get up to 1 week, 1 day, and 1 hour reminders when those offsets fit; all-day events get 1 day and morning-of reminders.
-- Calendar normalization rules for consistent output:
-  - No time means an all-day event.
-  - A start time without an end time or duration defaults to a 60-minute event.
-  - Named virtual meeting services and links (Zoom, Google Meet, Microsoft Teams, Webex, FaceTime, Skype, GoTo Meeting, BlueJeans, Discord, Slack huddles, and similar) are preserved as the event location instead of generic values like “Remote”.
+- **Natural-language event capture** — enter one message with one or many events.
+- **Live preview before saving** — HTMX calls `/preview` as the user types so extracted details can be reviewed first.
+- **Multiple LLM providers** — OpenAI, Anthropic, and local Ollama are supported through `LLM_PROVIDER`.
+- **Apple Calendar subscription feed** — saved events are exposed as a standards-friendly `.ics` feed.
+- **Safer public sharing** — optional `CALENDAR_FEED_TOKEN` moves the feed to `/calendar/<token>.ics` and disables the plain `/calendar.ics` route.
+- **Practical event normalization** — all-day inference, default one-hour durations, recurring events, exception dates, URLs, video-call locations, attachments, geo fields, and multiple reminders.
+- **Simple deployment path** — run locally with Uvicorn, with Docker Compose, or behind a Cloudflare Tunnel on a home server/VPS.
 
-## Run
+## Tech Stack
+
+| Area | Choices |
+| --- | --- |
+| Backend | FastAPI, Uvicorn |
+| UI | Jinja2 templates, HTMX, vanilla CSS/JavaScript |
+| Data | SQLite |
+| LLM providers | OpenAI Responses API, Anthropic Messages API, Ollama `/api/generate` |
+| Calendar output | iCalendar `.ics` feed with `VEVENT`, `RRULE`, `EXDATE`, and `VALARM` support |
+| Tests | Python `unittest` |
+| Deployment | Docker, Docker Compose, optional systemd + Cloudflare Tunnel |
+
+## How It Works
+
+1. A user enters free-form text such as:
+
+   ```text
+   Soccer practice every Tuesday at 6pm next month. Dentist Friday at 9am. Remind us 1 day before.
+   ```
+
+2. The app sends a structured extraction prompt to the configured LLM provider.
+3. The response is normalized into calendar events with consistent defaults.
+4. The preview panel shows the extracted event details.
+5. When saved, events are persisted to SQLite and published through the `.ics` feed.
+6. Apple Calendar subscribes to the feed and refreshes it like any other calendar subscription.
+
+## Local Development
+
+### 1. Create a virtual environment
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
 
-export LLM_PROVIDER=openai
-export OPENAI_API_KEY=...
-# export ANTHROPIC_API_KEY=...
-# export OLLAMA_BASE_URL=http://localhost:11434
+### 2. Configure environment variables
 
+Create a `.env` file in the project root:
+
+```bash
+LLM_PROVIDER=openai
+OPENAI_API_KEY=replace-me
+
+# Optional but recommended for any public deployment:
+# Generate with: openssl rand -hex 32
+CALENDAR_FEED_TOKEN=replace-with-a-long-random-token
+
+# Alternative providers:
+# LLM_PROVIDER=anthropic
+# ANTHROPIC_API_KEY=replace-me
+#
+# LLM_PROVIDER=ollama
+# OLLAMA_BASE_URL=http://localhost:11434
+```
+
+Supported providers are `openai`, `anthropic`, and `ollama`.
+
+### 3. Run the app
+
+```bash
 uvicorn app:app --reload
 ```
 
-Open `http://127.0.0.1:8000`.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
-## Apple Calendar subscription
-Use the HTTP feed URL shown by the app. Without `CALENDAR_FEED_TOKEN`, the local feed is:
+## Docker Compose
+
+Docker Compose runs the app on host port `8080` and stores the SQLite database in `./data/events.db`.
+
+```bash
+# Create .env with LLM_PROVIDER, provider credentials, and CALENDAR_FEED_TOKEN first.
+docker compose up --build
+```
+
+Then open [http://127.0.0.1:8080](http://127.0.0.1:8080).
+
+> `docker-compose.yaml` requires `CALENDAR_FEED_TOKEN` to be set before startup. This is intentional so the calendar feed is not accidentally exposed at a predictable public URL.
+
+## Calendar Subscription
+
+When `CALENDAR_FEED_TOKEN` is **not** set, the feed is available at:
 
 ```text
 http://127.0.0.1:8000/calendar.ics
 ```
 
-With `CALENDAR_FEED_TOKEN` set, the plain `/calendar.ics` endpoint is disabled and the feed moves to an unguessable URL path:
+When `CALENDAR_FEED_TOKEN` **is** set, the plain feed route returns `404` and the feed moves to:
 
 ```text
 http://127.0.0.1:8000/calendar/<token>.ics
 ```
 
-For Apple Calendar, either paste the HTTP feed URL using **File > New Calendar Subscription**, or use the app's **Open in Apple Calendar** button. If you build a `webcal://` launch link yourself, replace only the URL scheme:
+To subscribe from Apple Calendar:
+
+1. Open Apple Calendar.
+2. Choose **File > New Calendar Subscription**.
+3. Paste the HTTP or HTTPS feed URL shown by the app.
+4. Choose a refresh interval and save.
+
+The app also includes an **Open in Apple Calendar** button that converts the feed URL to a `webcal://` launch URL for convenience.
+
+## Shortcut-Friendly Endpoint
+
+The `/shortcuts/add` endpoint accepts a `text` query parameter, extracts events, saves them, and redirects back to the home page. It is useful for building a Siri Shortcut or quick mobile workflow.
 
 ```text
-webcal://127.0.0.1:8000/calendar/<token>.ics
+/shortcuts/add?text=Soccer%20practice%20Tuesday%20at%206pm
 ```
 
-Do not prepend `webcal://` to the whole HTTP URL. For example, `webcal://http//127.0.0.1:8000/calendar.ics` opens Calendar with a malformed subscription address (`http//127...`, missing `:`). The actual subscription feed remains an HTTP or HTTPS URL.
+## Deployment Notes
 
-## Deploy on Ubuntu behind Cloudflare Tunnel
-This app can run as a local `systemd` service on your Ubuntu box while Cloudflare Tunnel publishes a HTTPS hostname without opening inbound firewall ports.
+A common public deployment pattern is:
 
-> **Privacy note:** Apple Calendar subscriptions need to fetch the `.ics` URL without an interactive login page, so Cloudflare Access can break subscriptions. Set `CALENDAR_FEED_TOKEN` to publish the feed at an unguessable path like `/calendar/<token>.ics`; anyone with that full URL can still read the feed, so treat it like a password and rotate the token if it leaks.
+1. Run the app locally on a server with Uvicorn, Docker Compose, or a `systemd` service.
+2. Put it behind HTTPS using a reverse proxy or Cloudflare Tunnel.
+3. Set `CALENDAR_FEED_TOKEN` to a long random value.
+4. Keep the tokenized `.ics` feed reachable without an interactive login page so Apple Calendar can refresh it.
+5. Optionally protect the web UI with Cloudflare Access or another authentication layer while bypassing the tokenized feed path.
 
-### 1. Put the app on the server
-```bash
-sudo adduser --system --group --home /opt/ics-gen icsgen
-sudo apt update
-sudo apt install -y git python3 python3-venv
-sudo -u icsgen git clone <your-repo-url> /opt/ics-gen/app
-cd /opt/ics-gen/app
-sudo -u icsgen python3 -m venv .venv
-sudo -u icsgen .venv/bin/pip install -r requirements.txt
-```
+Apple Calendar cannot complete browser-based login flows while refreshing subscriptions, so the feed URL itself should be treated like a secret. Rotate `CALENDAR_FEED_TOKEN` if it is shared accidentally.
 
-Create `/opt/ics-gen/app/.env` with your provider settings:
+## Running Tests
 
 ```bash
-sudo -u icsgen tee /opt/ics-gen/app/.env >/dev/null <<'ENV'
-LLM_PROVIDER=openai
-OPENAI_API_KEY=replace-me
-# Protect the calendar feed with an unguessable URL path. Generate with: openssl rand -hex 32
-CALENDAR_FEED_TOKEN=replace-with-a-long-random-token
-# ANTHROPIC_API_KEY=replace-me
-# OLLAMA_BASE_URL=http://localhost:11434
-ENV
-sudo chmod 600 /opt/ics-gen/app/.env
+python -m unittest discover -s tests
 ```
 
-### 2. Run the FastAPI app with systemd
-Create `/etc/systemd/system/ics-gen.service`:
+## Environment Variables
 
-```ini
-[Unit]
-Description=ics-gen family calendar app
-After=network-online.target
-Wants=network-online.target
+| Variable | Required | Description |
+| --- | --- | --- |
+| `LLM_PROVIDER` | No | LLM provider to use: `openai`, `anthropic`, or `ollama`. Defaults to `openai`. |
+| `OPENAI_API_KEY` | For OpenAI | API key used when `LLM_PROVIDER=openai`. |
+| `ANTHROPIC_API_KEY` | For Anthropic | API key used when `LLM_PROVIDER=anthropic`. |
+| `OLLAMA_BASE_URL` | For Ollama | Ollama server URL. Defaults to `http://localhost:11434`. |
+| `CALENDAR_FEED_TOKEN` | Recommended | Enables the tokenized feed path `/calendar/<token>.ics` and disables `/calendar.ics`. |
+| `ICS_GEN_DB_PATH` | No | Custom SQLite database path. Defaults to `events.db` in the project root. |
 
-[Service]
-User=icsgen
-Group=icsgen
-WorkingDirectory=/opt/ics-gen/app
-EnvironmentFile=/opt/ics-gen/app/.env
-ExecStart=/opt/ics-gen/app/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable it:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now ics-gen
-sudo systemctl status ics-gen
-curl -I http://127.0.0.1:8000/calendar/<your-token>.ics
-```
-
-### 3. Create the Cloudflare Tunnel
-The dashboard-managed flow is the simplest:
-
-1. In Cloudflare Zero Trust, go to **Networks > Tunnels > Create a tunnel**.
-2. Choose **Cloudflared** and name the tunnel, for example `ics-gen`.
-3. Select the Debian/Ubuntu connector instructions for your CPU architecture and run the generated commands on the Ubuntu box. They install `cloudflared` as a service with a tunnel token.
-4. Add a public hostname, for example `calendar.example.com`, with service type `HTTP` and URL `http://localhost:8000`.
-
-After the connector is healthy, open:
+## Project Structure
 
 ```text
-https://calendar.example.com/
-https://calendar.example.com/calendar/<your-token>.ics
+.
+├── app.py                  # FastAPI app, LLM parsing, normalization, SQLite, and ICS generation
+├── templates/              # Jinja2 templates for the UI and live preview
+├── static/                 # Favicons and Apple touch icons
+├── tests/                  # Unit tests
+├── Dockerfile              # Container image definition
+├── docker-compose.yaml     # Local/containerized deployment
+└── requirements.txt        # Python dependencies
 ```
 
-For Apple Calendar, subscribe to:
+## Why This Project Exists
 
-```text
-https://calendar.example.com/calendar/<your-token>.ics
-```
-
-or use the app's **Open in Apple Calendar** button, which launches:
-
-```text
-webcal://calendar.example.com/calendar/<your-token>.ics
-```
-
-### Securing the public hostname
-Use a split approach so Apple Calendar can still refresh the feed:
-
-- Keep `CALENDAR_FEED_TOKEN` enabled; this makes the feed URL unguessable and disables the public `/calendar.ics` endpoint.
-- Do not require an interactive Cloudflare Access login for the tokenized `.ics` URL, because Apple Calendar cannot complete a browser login flow while refreshing subscriptions.
-- If you want to protect the web UI with Cloudflare Access, configure Access so the app pages require login but the tokenized feed path, such as `/calendar/<your-token>.ics`, is bypassed. A separate hostname just for the calendar feed also works.
-- Rotate the token if it is shared accidentally: update `CALENDAR_FEED_TOKEN`, restart `ics-gen`, then resubscribe devices to the new URL.
-
-### 4. Updating later
-```bash
-cd /opt/ics-gen/app
-sudo -u icsgen git pull
-sudo -u icsgen .venv/bin/pip install -r requirements.txt
-sudo systemctl restart ics-gen
-sudo journalctl -u ics-gen -n 100 --no-pager
-```
+This was built as a practical resume project: a focused product idea with real-world integration concerns rather than a toy CRUD app. The codebase shows how to combine LLM extraction with deterministic business rules, user review, persistent storage, and a standards-based output format that works with existing calendar clients.
