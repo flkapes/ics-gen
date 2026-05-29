@@ -159,6 +159,16 @@ def load_dotenv_file(path: Path) -> None:
 load_dotenv_file(BASE_DIR / ".env")
 
 
+def database_path() -> Path:
+    return Path(os.getenv("ICS_GEN_DB_PATH", str(DB_PATH)))
+
+
+def connect_db() -> sqlite3.Connection:
+    path = database_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return sqlite3.connect(path)
+
+
 @dataclass
 class Event:
     name: str
@@ -180,7 +190,7 @@ class Event:
 
 
 def init_db() -> None:
-    with sqlite3.connect(DB_PATH) as conn:
+    with connect_db() as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS events (
@@ -461,7 +471,7 @@ def parse_with_provider(provider: str, text: str) -> list[Event]:
 
 
 def write_events(events: Iterable[Event]) -> None:
-    with sqlite3.connect(DB_PATH) as conn:
+    with connect_db() as conn:
         for event in events:
             event_id = event.uid or str(uuid.uuid4())
             if event.operation == "cancel_instance" and event.uid:
@@ -520,7 +530,8 @@ def event_to_ics(event_row: sqlite3.Row) -> str:
     if event_row["location"]:
         lines.append(f"LOCATION:{event_row['location']}")
     if event_row["description"]:
-        lines.append(f"DESCRIPTION:{event_row['description'].replace(chr(10), '\\n')}")
+        description = event_row["description"].replace(chr(10), "\\n")
+        lines.append(f"DESCRIPTION:{description}")
     if event_row["url"]:
         lines.append(f"URL:{event_row['url']}")
     if event_row["geo"]:
@@ -555,7 +566,7 @@ def build_calendar(events: list[sqlite3.Row]) -> str:
 
 
 def fetch_rows() -> list[sqlite3.Row]:
-    with sqlite3.connect(DB_PATH) as conn:
+    with connect_db() as conn:
         conn.row_factory = sqlite3.Row
         return conn.execute("SELECT * FROM events ORDER BY date, start_time").fetchall()
 
