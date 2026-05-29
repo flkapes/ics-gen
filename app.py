@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import os
 import re
+import secrets
 import sqlite3
 import uuid
 from dataclasses import dataclass
@@ -573,6 +574,21 @@ def static_icon_response(file_name: str) -> Response:
     return FileResponse(path)
 
 
+def calendar_feed_token() -> str:
+    return os.getenv("CALENDAR_FEED_TOKEN", "").strip()
+
+
+def calendar_feed_path() -> str:
+    token = calendar_feed_token()
+    if token:
+        return f"/calendar/{token}.ics"
+    return "/calendar.ics"
+
+
+def calendar_feed_response() -> Response:
+    return Response(content=build_calendar(fetch_rows()), media_type="text/calendar")
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon_ico() -> Response:
     return static_icon_response("favicon.ico")
@@ -594,7 +610,16 @@ def apple_touch_icon_precomposed() -> Response:
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("index.html", {"request": request, "events": fetch_rows(), "error": None, "provider": os.getenv("LLM_PROVIDER", "openai").strip().lower()})
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "events": fetch_rows(),
+            "error": None,
+            "provider": os.getenv("LLM_PROVIDER", "openai").strip().lower(),
+            "calendar_feed_path": calendar_feed_path(),
+        },
+    )
 
 
 @app.post("/preview", response_class=HTMLResponse)
@@ -618,7 +643,17 @@ def save(event_text: str = Form(...)) -> RedirectResponse:
 
 @app.get("/calendar.ics")
 def calendar_feed() -> Response:
-    return Response(content=build_calendar(fetch_rows()), media_type="text/calendar")
+    if calendar_feed_token():
+        return Response(status_code=404)
+    return calendar_feed_response()
+
+
+@app.get("/calendar/{token}.ics")
+def token_calendar_feed(token: str) -> Response:
+    expected_token = calendar_feed_token()
+    if not expected_token or not secrets.compare_digest(token, expected_token):
+        return Response(status_code=404)
+    return calendar_feed_response()
 
 
 @app.get("/shortcuts/add")
